@@ -468,27 +468,29 @@ async function createGestureRecognizer(filesetResolver, delegate) {
 async function initModels() {
   filesetResolver = await FilesetResolver.forVisionTasks(WASM_BASE);
 
-  // The GPU delegate isn't reliably supported on every mobile browser (older
-  // Android WebViews, some iOS Safari versions), so fall back to CPU if it
-  // fails to initialize.
+  // The GPU delegate is unreliable across mobile browsers: on some (e.g.
+  // Samsung Internet) it doesn't throw at all, it just silently feeds the
+  // model garbage/empty texture data, so detection runs forever without
+  // ever finding a face and without any visible error. CPU is slower per
+  // frame but far more broadly correct, so it's the default everywhere;
+  // GPU is only attempted as a fallback if CPU creation itself fails.
   try {
-    faceLandmarker = await createFaceLandmarker(filesetResolver, "GPU");
-  } catch {
     faceLandmarker = await createFaceLandmarker(filesetResolver, "CPU");
+  } catch {
+    faceLandmarker = await createFaceLandmarker(filesetResolver, "GPU");
   }
 
   try {
-    gestureRecognizer = await createGestureRecognizer(filesetResolver, "GPU");
-  } catch {
     gestureRecognizer = await createGestureRecognizer(filesetResolver, "CPU");
+  } catch {
+    gestureRecognizer = await createGestureRecognizer(filesetResolver, "GPU");
   }
 }
 
-// Some mobile GPUs accept the GPU delegate at model-creation time but throw
-// on the first real inference call. Without this, that exception would
-// escape predictLoop's requestAnimationFrame chain and silently freeze
-// detection forever (the video keeps playing on its own either way, so
-// there'd be no visible sign anything broke).
+// Safety net for a detection call throwing at runtime after models already
+// loaded successfully (e.g. a transient GPU failure if GPU ended up being
+// used above). Rebuilds both models on CPU, which should never fail this
+// way.
 async function recoverWithCpuDelegate() {
   try {
     faceLandmarker = await createFaceLandmarker(filesetResolver, "CPU");
