@@ -150,6 +150,7 @@ function spawnHeartBurst() {
 
 let faceLandmarker = null;
 let gestureRecognizer = null;
+let filesetResolver = null;
 let lastVideoTime = -1;
 let displayedExpression = "neutral";
 let candidateExpression = "neutral";
@@ -437,7 +438,7 @@ async function createGestureRecognizer(filesetResolver, delegate) {
 }
 
 async function initModels() {
-  const filesetResolver = await FilesetResolver.forVisionTasks(WASM_BASE);
+  filesetResolver = await FilesetResolver.forVisionTasks(WASM_BASE);
 
   // The GPU delegate isn't reliably supported on every mobile browser (older
   // Android WebViews, some iOS Safari versions), so fall back to CPU if it
@@ -452,6 +453,20 @@ async function initModels() {
     gestureRecognizer = await createGestureRecognizer(filesetResolver, "GPU");
   } catch {
     gestureRecognizer = await createGestureRecognizer(filesetResolver, "CPU");
+  }
+}
+
+// Some mobile GPUs accept the GPU delegate at model-creation time but throw
+// on the first real inference call. Without this, that exception would
+// escape predictLoop's requestAnimationFrame chain and silently freeze
+// detection forever (the video keeps playing on its own either way, so
+// there'd be no visible sign anything broke).
+async function recoverWithCpuDelegate() {
+  try {
+    faceLandmarker = await createFaceLandmarker(filesetResolver, "CPU");
+    gestureRecognizer = await createGestureRecognizer(filesetResolver, "CPU");
+  } catch (err) {
+    showCameraError(`Detection failed and could not recover: ${err.message}`);
   }
 }
 
@@ -486,6 +501,8 @@ async function startWebcam() {
   }
 }
 
+let recoveryInFlight = false;
+
 function predictLoop() {
   if (!faceLandmarker || !gestureRecognizer || video.paused || video.ended) {
     requestAnimationFrame(predictLoop);
@@ -495,11 +512,21 @@ function predictLoop() {
   if (video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
     const timestamp = performance.now();
-    const faceResult = faceLandmarker.detectForVideo(video, timestamp);
-    const gestureResult = gestureRecognizer.recognizeForVideo(video, timestamp);
+    try {
+      const faceResult = faceLandmarker.detectForVideo(video, timestamp);
+      const gestureResult = gestureRecognizer.recognizeForVideo(video, timestamp);
 
-    const expression = classifyState(faceResult, gestureResult);
-    updateDisplayedExpression(expression);
+      const expression = classifyState(faceResult, gestureResult);
+      updateDisplayedExpression(expression);
+    } catch (err) {
+      console.error("Detection error, will retry on CPU delegate:", err);
+      if (!recoveryInFlight) {
+        recoveryInFlight = true;
+        recoverWithCpuDelegate().finally(() => {
+          recoveryInFlight = false;
+        });
+      }
+    }
   }
 
   requestAnimationFrame(predictLoop);
