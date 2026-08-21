@@ -123,6 +123,16 @@ const loadingOverlay = document.getElementById("loadingOverlay");
 const heartBurst = document.getElementById("heartBurst");
 const debugPanel = document.getElementById("debugPanel");
 
+// Some Android browsers hand lower-level frame-reading APIs the raw,
+// unrotated camera sensor buffer even though the <video> element itself
+// displays it correctly-oriented (the browser applies that correction only
+// at the compositor level). Feeding MediaPipe the <video> element directly
+// can then mean it's looking at a sideways face despite the on-screen
+// preview looking normal. Drawing each frame onto a canvas first forces the
+// same orientation-correction the browser uses for on-screen rendering.
+const captureCanvas = document.createElement("canvas");
+const captureCtx = captureCanvas.getContext("2d", { willReadFrequently: true });
+
 let debugFrameCount = 0;
 
 function updateDebugPanel(faceResult, gestureResult, expression, error) {
@@ -535,7 +545,14 @@ let recoveryInFlight = false;
 let lastDetectTimestamp = -1;
 
 function predictLoop() {
-  if (!faceLandmarker || !gestureRecognizer || video.paused || video.ended) {
+  if (
+    !faceLandmarker ||
+    !gestureRecognizer ||
+    video.paused ||
+    video.ended ||
+    !video.videoWidth ||
+    !video.videoHeight
+  ) {
     requestAnimationFrame(predictLoop);
     return;
   }
@@ -550,8 +567,17 @@ function predictLoop() {
   if (timestamp > lastDetectTimestamp) {
     lastDetectTimestamp = timestamp;
     try {
-      const faceResult = faceLandmarker.detectForVideo(video, timestamp);
-      const gestureResult = gestureRecognizer.recognizeForVideo(video, timestamp);
+      if (
+        captureCanvas.width !== video.videoWidth ||
+        captureCanvas.height !== video.videoHeight
+      ) {
+        captureCanvas.width = video.videoWidth;
+        captureCanvas.height = video.videoHeight;
+      }
+      captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+
+      const faceResult = faceLandmarker.detectForVideo(captureCanvas, timestamp);
+      const gestureResult = gestureRecognizer.recognizeForVideo(captureCanvas, timestamp);
 
       const expression = classifyState(faceResult, gestureResult);
       updateDisplayedExpression(expression);
