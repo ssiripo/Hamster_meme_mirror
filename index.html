@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Hamster Face Mirror</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>🐹 Hamster Meme Face Mirror</h1>
+    <p class="subtitle">Your face, translated into hamster.</p>
+  </header>
+
+  <main class="stage">
+    <section class="card card--camera">
+      <h2 class="card-title">📷 Your Camera</h2>
+      <div class="media-frame">
+        <video id="webcam" autoplay playsinline muted></video>
+        <div id="cameraError" class="overlay hidden">
+          <p id="cameraErrorText">Camera unavailable.</p>
+        </div>
+        <div id="loadingOverlay" class="overlay">
+          <p>Loading face &amp; gesture models…</p>
+        </div>
+      </div>
+      <p class="status-line">
+        <span class="status-badge" id="expressionLabel">—</span>
+      </p>
+    </section>
+
+    <section class="card card--hamster">
+      <h2 class="card-title">🐹 Hamster Reaction</h2>
+      <div class="media-frame">
+        <img id="hamsterImage" src="assets/hamster_neutral.jpg" alt="Hamster reaction" />
+      </div>
+      <p class="status-line hint">Updates live as your expression changes</p>
+    </section>
+  </main>
+
+  <div id="heartBurst" class="heart-burst" aria-hidden="true"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
