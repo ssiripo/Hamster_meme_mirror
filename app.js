@@ -121,6 +121,35 @@ const cameraError = document.getElementById("cameraError");
 const cameraErrorText = document.getElementById("cameraErrorText");
 const loadingOverlay = document.getElementById("loadingOverlay");
 const heartBurst = document.getElementById("heartBurst");
+const debugPanel = document.getElementById("debugPanel");
+
+let debugFrameCount = 0;
+
+function updateDebugPanel(faceResult, gestureResult, expression, error) {
+  if (!debugPanel) return;
+  debugFrameCount += 1;
+
+  if (error) {
+    debugPanel.textContent = `frame ${debugFrameCount} | ERROR: ${error.message}`;
+    return;
+  }
+
+  const hasFace =
+    faceResult && faceResult.faceBlendshapes && faceResult.faceBlendshapes.length > 0;
+  const categories = hasFace ? faceResult.faceBlendshapes[0].categories : [];
+  const jawOpen = blendshapeScore(categories, "jawOpen").toFixed(2);
+  const smile = (
+    (blendshapeScore(categories, "mouthSmileLeft") +
+      blendshapeScore(categories, "mouthSmileRight")) /
+    2
+  ).toFixed(2);
+  const browRaise = blendshapeScore(categories, "browInnerUp").toFixed(2);
+  const handCount = (gestureResult && gestureResult.landmarks && gestureResult.landmarks.length) || 0;
+
+  debugPanel.textContent =
+    `frame ${debugFrameCount} | face: ${hasFace} | hands: ${handCount} | ` +
+    `jawOpen: ${jawOpen} smile: ${smile} browRaise: ${browRaise} | state: ${expression}`;
+}
 
 const HEART_EMOJIS = ["💖", "💗", "💕", "❤️"];
 const HEART_COUNT = 14;
@@ -151,7 +180,6 @@ function spawnHeartBurst() {
 let faceLandmarker = null;
 let gestureRecognizer = null;
 let filesetResolver = null;
-let lastVideoTime = -1;
 let displayedExpression = "neutral";
 let candidateExpression = "neutral";
 let candidateStreak = 0;
@@ -502,6 +530,7 @@ async function startWebcam() {
 }
 
 let recoveryInFlight = false;
+let lastDetectTimestamp = -1;
 
 function predictLoop() {
   if (!faceLandmarker || !gestureRecognizer || video.paused || video.ended) {
@@ -509,17 +538,25 @@ function predictLoop() {
     return;
   }
 
-  if (video.currentTime !== lastVideoTime) {
-    lastVideoTime = video.currentTime;
-    const timestamp = performance.now();
+  // Deliberately NOT gated on video.currentTime: for a live getUserMedia
+  // MediaStream (as opposed to a video file), currentTime doesn't reliably
+  // advance on every mobile browser. Gating on it risked silently freezing
+  // detection after the first frame with the camera still visibly playing.
+  // MediaPipe requires a strictly increasing timestamp per detectForVideo
+  // call, so we still guard against duplicate/non-increasing values here.
+  const timestamp = performance.now();
+  if (timestamp > lastDetectTimestamp) {
+    lastDetectTimestamp = timestamp;
     try {
       const faceResult = faceLandmarker.detectForVideo(video, timestamp);
       const gestureResult = gestureRecognizer.recognizeForVideo(video, timestamp);
 
       const expression = classifyState(faceResult, gestureResult);
       updateDisplayedExpression(expression);
+      updateDebugPanel(faceResult, gestureResult, expression, null);
     } catch (err) {
       console.error("Detection error, will retry on CPU delegate:", err);
+      updateDebugPanel(null, null, null, err);
       if (!recoveryInFlight) {
         recoveryInFlight = true;
         recoverWithCpuDelegate().finally(() => {

@@ -249,6 +249,26 @@ body {
   z-index: 999;
 }
 
+/* Temporary diagnostic readout for tracking down mobile detection issues.
+   Safe to delete once detection is confirmed working across devices. */
+.debug-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  color: #9dffb0;
+  background: rgba(0, 0, 0, 0.75);
+  white-space: pre-wrap;
+  word-break: break-word;
+  z-index: 1000;
+  pointer-events: none;
+}
+
 .heart-burst span {
   position: absolute;
   bottom: -10%;
